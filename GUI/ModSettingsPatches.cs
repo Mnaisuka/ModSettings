@@ -2,6 +2,7 @@
 using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
+using static Il2Cpp.BasicMenu;
 
 namespace ModSettings {
 
@@ -46,20 +47,39 @@ namespace ModSettings {
 				if (basicMenu == null)
 					return;
 
-				AddAnotherMenuItem(basicMenu); // We need one more than they have...
+				AddAnotherMenuItem(basicMenu, __instance); // We need one more than they have...
 				BasicMenu.BasicMenuItemModel firstItem = basicMenu.m_ItemModelList[0];
 				int itemIndex = basicMenu.GetItemCount();
+
+				foreach (BasicMenuItemModel item in basicMenu.m_ItemModelList)
+				{
+                    if (item.m_Id == "ModSettings") {                        
+                        return;
+                    }
+                }
+
 				basicMenu.AddItem("ModSettings", MOD_SETTINGS_ID, itemIndex, "Mod Settings", "Change the configuration of your mods", null,
 						new Action(() => ShowModSettings(__instance)), firstItem.m_NormalTint, firstItem.m_HighlightTint);
-			}
+            }
 
 			private static void ShowModSettings(Panel_OptionsMenu __instance) {
 				ModSettingsGUI settings = GetModSettingsGUI(__instance);
 				settings.Enable(__instance);
 			}
 
-			private static void AddAnotherMenuItem(BasicMenu basicMenu) {
-				GameObject gameObject = NGUITools.AddChild(basicMenu.m_MenuGrid.gameObject, basicMenu.m_BasicMenuItemPrefab);
+			private static void AddAnotherMenuItem(BasicMenu basicMenu, Panel_OptionsMenu optionsPanel) {
+				GameObject menuItem = GameObject.Find("SCRIPT_InterfaceManager/_GUI_Common/Camera/Anchor/Panel_OptionsMenu/Pages/MainTab/MenuRoot2/Menu/Left_Align/Grid/ModSettings MenuItem");
+
+				if(menuItem != null) 
+				{
+					return;   
+                }
+
+				GameObject newButtonBackground = GameObject.Instantiate(optionsPanel.m_MainMenuItem_PrivacyBackground);
+				newButtonBackground.name = "ModSettingsBackground";
+                optionsPanel.m_MainMenuItemsBackground.Add(newButtonBackground);
+
+                GameObject gameObject = NGUITools.AddChild(basicMenu.m_MenuGrid.gameObject, basicMenu.m_BasicMenuItemPrefab);
 				gameObject.name = "ModSettings MenuItem";
 				BasicMenuItem item = gameObject.GetComponent<BasicMenuItem>();
 				BasicMenu.BasicMenuItemView view = item.m_View;
