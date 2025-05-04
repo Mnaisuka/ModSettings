@@ -77,7 +77,9 @@ namespace ModSettings {
 
 				GameObject newButtonBackground = GameObject.Instantiate(optionsPanel.m_MainMenuItem_PrivacyBackground);
 				newButtonBackground.name = "ModSettingsBackground";
+
                 optionsPanel.m_MainMenuItemsBackground.Add(newButtonBackground);
+                newButtonBackground.SetActive(false);
 
                 GameObject gameObject = NGUITools.AddChild(basicMenu.m_MenuGrid.gameObject, basicMenu.m_BasicMenuItemPrefab);
 				gameObject.name = "ModSettings MenuItem";
