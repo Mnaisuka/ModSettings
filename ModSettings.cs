@@ -3,7 +3,8 @@ using UnityEngine;
 using Il2CppInterop;
 using Il2CppInterop.Runtime.Injection; 
 using System.Collections;
-
+using Il2Cpp;
+using UnityEngine.EventSystems;
 
 namespace ModSettings
 {
@@ -18,11 +19,29 @@ namespace ModSettings
 			#endif
         }
 
-        public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+        public override void OnSceneWasInitialized(int buildIndex, string sceneName)
 		{
-       
+            if (sceneName.Contains("MainMenu"))
+            {
+                Camera eventCam = GameManager.GetMainCamera();
 
+                if (eventCam != null)
+                {
+                    EventSystem eventSystem = eventCam.gameObject.GetComponent<EventSystem>();
 
+                    if (!eventSystem)
+                    {
+                        eventSystem = eventCam.gameObject.AddComponent<EventSystem>();
+                    }
+
+                    StandaloneInputModule inputModule = eventCam.gameObject.GetComponent<StandaloneInputModule>();
+
+                    if (!inputModule)
+                    {
+                        eventCam.gameObject.AddComponent<StandaloneInputModule>();
+                    }
+                }
+            }
         }
 
         public override void OnUpdate()

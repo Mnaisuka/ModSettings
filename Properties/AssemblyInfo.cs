@@ -8,14 +8,14 @@ using System.Runtime.InteropServices;
 //ModName, ModVersion, ModAuthor, and ModNamespace.ModClassInheritingFromMelonMod all need changed.
 
 [assembly: AssemblyTitle("ModSettings")]
-[assembly: AssemblyCopyright("zeobviouslyfakeacc, Digitalzombie")]
+[assembly: AssemblyCopyright("Digitalzombie, zeobviouslyfakeacc")]
 
 //Version numbers in C# are a set of 1 to 4 positive integers separated by periods.
 //Mods typically use 3 numbers. For example: 1.2.1
 //The mod version need specified in three places.
-[assembly: AssemblyVersion("2.0.6")]
-[assembly: AssemblyFileVersion("2.0.6")]
-[assembly: MelonInfo(typeof(ModSettingsMain), "ModSettings", "2.0.6", "zeobviouslyfakeacc, Digitalzombie", null)]
+[assembly: AssemblyVersion("2.0.8")]
+[assembly: AssemblyFileVersion("2.0.8")]
+[assembly: MelonInfo(typeof(ModSettingsMain), "ModSettings", "2.0.8", "Digitalzombie, zeobviouslyfakeacc", null)]
 
 //This tells MelonLoader that the mod is only for The Long Dark.
 [assembly: MelonGame("Hinterland", "TheLongDark")]
