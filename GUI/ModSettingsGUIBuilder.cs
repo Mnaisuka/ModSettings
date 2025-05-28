@@ -12,11 +12,11 @@ namespace ModSettings {
 			GameObject tab = UnityEngine.Object.Instantiate(panel.m_QualityTab, pages);
 			tab.name = "ModSettings";
 
-			Transform titleLabel = tab.transform.Find("TitleDisplay/Label");
-            UnityEngine.Object.Destroy(titleLabel.GetComponent<UILocalize>());
-			titleLabel.GetComponent<UILabel>().text = "Mod Settings";
+			//Transform titleLabel = tab.transform.Find("TitleDisplay/Label");
+            //UnityEngine.Object.Destroy(titleLabel.GetComponent<UILocalize>());
+			//titleLabel.GetComponent<UILabel>().text = "Mod Settings";
 
-			panel.m_MainMenuItemTabs.Add(tab);
+			//panel.m_MainMenuItemTabs.Add(tab);
 			panel.m_Tabs.Add(tab);
 
 			return tab;
