@@ -1,277 +1,395 @@
 ﻿using Il2Cpp;
+using MelonLoader.TinyJSON;
 using System.Reflection;
 using UnityEngine;
 using static ModSettings.AttributeFieldTypes;
 using Il2CppCollections = Il2CppSystem.Collections.Generic;
 
-namespace ModSettings {
-	internal abstract class GUIBuilder {
+namespace ModSettings
+{
+    internal abstract class GUIBuilder
+    {
 
-		internal const int gridCellHeight = 33;
+        internal const int gridCellHeight = 33;
 
-		protected readonly UIGrid uiGrid;
-		protected readonly Il2CppCollections.List<GameObject> menuItems;
+        protected readonly UIGrid uiGrid;
+        protected readonly Il2CppCollections.List<GameObject> menuItems;
 
-		protected Header lastHeader;
+        protected Header lastHeader;
 
-		protected GUIBuilder(UIGrid uiGrid, Il2CppCollections.List<GameObject> menuItems) {
-			this.uiGrid = uiGrid;
-			this.menuItems = menuItems;
-		}
+        protected GUIBuilder(UIGrid uiGrid, Il2CppCollections.List<GameObject> menuItems)
+        {
+            this.uiGrid = uiGrid;
+            this.menuItems = menuItems;
+        }
 
-		internal virtual void AddSettings(ModSettingsBase modSettings) {
-			foreach (FieldInfo field in modSettings.GetFields()) {
-				Attributes.GetAttributes(field, out SectionAttribute section, out NameAttribute name,
-						out DescriptionAttribute description, out SliderAttribute slider, out ChoiceAttribute choice);
+        internal virtual void AddSettings(ModSettingsBase modSettings)
+        {
+            foreach (FieldInfo field in modSettings.GetFields())
+            {
+                Attributes.GetAttributes(field, out SectionAttribute section, out NameAttribute name,
+                        out DescriptionAttribute description, out SliderAttribute slider, out ChoiceAttribute choice);
 
-				if (section != null) {
-					AddHeader(section);
-				} else if (lastHeader == null) {
-					AddPaddingHeader();
-				}
+                // -----------
 
-				if (slider != null) {
-					AddSliderSetting(modSettings, field, name, description, slider);
-				} else if (choice != null) {
-					AddChoiceSetting(modSettings, field, name, description, choice);
-				} else {
-					// No Slider or Choice annotation, determine GUI object from field type
-					Type fieldType = field.FieldType;
+                // 入口
 
-					if (fieldType == typeof(UnityEngine.KeyCode)) {
-						AddKeySetting(modSettings, field, name, description);
-					} else if (fieldType.IsEnum) {
-						AddChoiceSetting(modSettings, field, name, description, ChoiceAttribute.ForEnumType(fieldType));
-					} else if (fieldType == typeof(bool)) {
-						AddChoiceSetting(modSettings, field, name, description, ChoiceAttribute.YesNoAttribute);
-					} else if (IsFloatType(fieldType)) {
-						AddSliderSetting(modSettings, field, name, description, SliderAttribute.DefaultFloatRange);
-					} else if (IsIntegerType(fieldType)) {
-						AddSliderSetting(modSettings, field, name, description, SliderAttribute.DefaultIntRange);
-					} else {
-						throw new ArgumentException("Unsupported field type: " + fieldType.Name);
-					}
-				}
-			}
-		}
+                // JSON 文件路径
+                string jsonPath = "Settings.json";
 
-		protected virtual void SetSettingsField(ModSettingsBase modSettings, FieldInfo field, object newValue) {
-			modSettings.SetFieldValue(field, newValue);
-		}
+                // 初始化字典用于读取/写入JSON
+                Dictionary<string, string> jsonData = new();
+                if (File.Exists(jsonPath))
+                {
+                    string jsonContent = File.ReadAllText(jsonPath);
+                    try
+                    {
+                        jsonData = JSON.Load(jsonContent).Make<Dictionary<string, string>>();
+                    }
+                    catch (Exception e)
+                    {
+                        MelonLoader.MelonLogger.Warning("Settings.json 格式错误：" + e.Message);
+                    }
+                }
 
-		private void AddHeader(SectionAttribute section) {
-			GameObject padding = NGUITools.AddChild(uiGrid.gameObject);
-			GameObject header = NGUITools.AddChild(uiGrid.gameObject);
-			GameObject label = NGUITools.AddChild(header, ObjectPrefabs.HeaderLabelPrefab);
+                if (name != null && name.Name != null)
+                {
+                    string nameKey = name.Name;
+                    if (jsonData.TryGetValue(nameKey, out string newName))
+                    {
+                        name = new NameAttribute(newName);
+                    }
+                    else
+                    {
+                        jsonData[nameKey] = name.Name; // 不存在就添加原始值
+                    }
+                }
 
-			label.SetActive(true);
-			label.transform.localPosition = new Vector2(-70, 0);
-			label.name = "Custom Header (" + section.Title + ")";
-			SetLabelText(label.transform, section.Title, section.Localize);
+                if (description != null && description.Description != null)
+                {
+                    string descKey = description.Description;
+                    if (jsonData.TryGetValue(descKey, out string newDesc))
+                    {
+                        description = new DescriptionAttribute(newDesc);
+                    }
+                    else
+                    {
+                        jsonData[descKey] = description.Description; // 不存在就添加原始值
+                    }
+                }
 
-			lastHeader = new Header(header, padding);
-		}
+                // 将更新后的内容写回文件
+                string updatedJson = JSON.Dump(jsonData, EncodeOptions.PrettyPrint);
+                File.WriteAllText(jsonPath, updatedJson, System.Text.Encoding.UTF8);
 
-		private void AddPaddingHeader() {
-			GameObject padding = NGUITools.AddChild(uiGrid.gameObject);
-			lastHeader = new Header(padding);
-		}
+                // -----------
 
-		private void AddKeySetting(ModSettingsBase modSettings, FieldInfo field, NameAttribute name, DescriptionAttribute description) {
-			// Create menu item
-			GameObject setting = CreateSetting(name, description, ObjectPrefabs.KeyEntryPrefab, "Label");
-			GameObject keyButtonObject = setting.transform.FindChild("Keybinding_Button").gameObject;
 
-			CustomKeybinding customKeybinding = setting.AddComponent<CustomKeybinding>();
-			customKeybinding.keyRebindingButton = keyButtonObject.GetComponent<KeyRebindingButton>();
-			customKeybinding.currentKeycodeSetting = (KeyCode)field.GetValue(modSettings);
-			customKeybinding.RefreshLabelValue();
+                if (section != null)
+                {
+                    AddHeader(section);
+                }
+                else if (lastHeader == null)
+                {
+                    AddPaddingHeader();
+                }
 
-			UIButton uiButton = keyButtonObject.GetComponent<UIButton>();
-			EventDelegate.Set(uiButton.onClick, new Action(customKeybinding.OnClick));
-			customKeybinding.OnChange = new Action(() => UpdateKeyValue(modSettings, field, customKeybinding));
-			modSettings.AddRefreshAction(() => UpdateKeyChoice(modSettings, field, customKeybinding));
+                if (slider != null)
+                {
+                    AddSliderSetting(modSettings, field, name, description, slider);
+                }
+                else if (choice != null)
+                {
+                    AddChoiceSetting(modSettings, field, name, description, choice);
+                }
+                else
+                {
+                    // No Slider or Choice annotation, determine GUI object from field type
+                    Type fieldType = field.FieldType;
 
-			// Control visibility
-			SetVisibilityListener(modSettings, field, setting, lastHeader);
-		}
+                    if (fieldType == typeof(UnityEngine.KeyCode))
+                    {
+                        AddKeySetting(modSettings, field, name, description);
+                    }
+                    else if (fieldType.IsEnum)
+                    {
+                        AddChoiceSetting(modSettings, field, name, description, ChoiceAttribute.ForEnumType(fieldType));
+                    }
+                    else if (fieldType == typeof(bool))
+                    {
+                        AddChoiceSetting(modSettings, field, name, description, ChoiceAttribute.YesNoAttribute);
+                    }
+                    else if (IsFloatType(fieldType))
+                    {
+                        AddSliderSetting(modSettings, field, name, description, SliderAttribute.DefaultFloatRange);
+                    }
+                    else if (IsIntegerType(fieldType))
+                    {
+                        AddSliderSetting(modSettings, field, name, description, SliderAttribute.DefaultIntRange);
+                    }
+                    else
+                    {
+                        throw new ArgumentException("Unsupported field type: " + fieldType.Name);
+                    }
+                }
+            }
+        }
 
-		private void UpdateKeyValue(ModSettingsBase modSettings, FieldInfo field, CustomKeybinding customKeybinding) {
-			SetSettingsField(modSettings, field, customKeybinding.currentKeycodeSetting);
-		}
+        protected virtual void SetSettingsField(ModSettingsBase modSettings, FieldInfo field, object newValue)
+        {
+            modSettings.SetFieldValue(field, newValue);
+        }
 
-		private void UpdateKeyChoice(ModSettingsBase modSettings, FieldInfo field, CustomKeybinding customKeybinding) {
-			KeyCode keyCode = (KeyCode)field.GetValue(modSettings);
-			customKeybinding.currentKeycodeSetting = keyCode;
-			customKeybinding.keyRebindingButton.SetValueLabel(keyCode.ToString());
-		}
+        private void AddHeader(SectionAttribute section)
+        {
+            GameObject padding = NGUITools.AddChild(uiGrid.gameObject);
+            GameObject header = NGUITools.AddChild(uiGrid.gameObject);
+            GameObject label = NGUITools.AddChild(header, ObjectPrefabs.HeaderLabelPrefab);
 
-		private void AddChoiceSetting(ModSettingsBase modSettings, FieldInfo field, NameAttribute name, DescriptionAttribute description, ChoiceAttribute choice) {
-			// Create menu item
-			GameObject setting = CreateSetting(name, description, ObjectPrefabs.ComboBoxPrefab, "Label");
-			ConsoleComboBox comboBox = setting.GetComponent<ConsoleComboBox>();
+            label.SetActive(true);
+            label.transform.localPosition = new Vector2(-70, 0);
+            label.name = "Custom Header (" + section.Title + ")";
+            SetLabelText(label.transform, section.Title, section.Localize);
 
-			// Add selectable values
-			comboBox.items.Clear();
-			foreach (string choiceName in choice.Names) {
-				comboBox.items.Add(choiceName);
-			}
-			comboBox.m_Localize = choice.Localize;
+            lastHeader = new Header(header, padding);
+        }
 
-			// Add listener and set default value
-			EventDelegate.Set(comboBox.onChange, new Action(() => UpdateChoiceValue(modSettings, field, comboBox.GetCurrentIndex())));
-			modSettings.AddRefreshAction(() => UpdateChoiceComboBox(modSettings, field, comboBox));
+        private void AddPaddingHeader()
+        {
+            GameObject padding = NGUITools.AddChild(uiGrid.gameObject);
+            lastHeader = new Header(padding);
+        }
 
-			// Control visibility
-			SetVisibilityListener(modSettings, field, setting, lastHeader);
-		}
+        private void AddKeySetting(ModSettingsBase modSettings, FieldInfo field, NameAttribute name, DescriptionAttribute description)
+        {
+            // Create menu item
+            GameObject setting = CreateSetting(name, description, ObjectPrefabs.KeyEntryPrefab, "Label");
+            GameObject keyButtonObject = setting.transform.FindChild("Keybinding_Button").gameObject;
 
-		private void UpdateChoiceValue(ModSettingsBase modSettings, FieldInfo field, int selectedIndex) {
-			Type fieldType = field.FieldType;
-			if (fieldType.IsEnum) {
-				fieldType = Enum.GetUnderlyingType(fieldType);
-			}
+            CustomKeybinding customKeybinding = setting.AddComponent<CustomKeybinding>();
+            customKeybinding.keyRebindingButton = keyButtonObject.GetComponent<KeyRebindingButton>();
+            customKeybinding.currentKeycodeSetting = (KeyCode)field.GetValue(modSettings);
+            customKeybinding.RefreshLabelValue();
 
-			SetSettingsField(modSettings, field, Convert.ChangeType(selectedIndex, fieldType, null));
-		}
+            UIButton uiButton = keyButtonObject.GetComponent<UIButton>();
+            EventDelegate.Set(uiButton.onClick, new Action(customKeybinding.OnClick));
+            customKeybinding.OnChange = new Action(() => UpdateKeyValue(modSettings, field, customKeybinding));
+            modSettings.AddRefreshAction(() => UpdateKeyChoice(modSettings, field, customKeybinding));
 
-		private static void UpdateChoiceComboBox(ModSettingsBase modSettings, FieldInfo field, ConsoleComboBox comboBox) {
-			int value = Convert.ToInt32(field.GetValue(modSettings));
-			comboBox.value = comboBox.items[value];
-		}
+            // Control visibility
+            SetVisibilityListener(modSettings, field, setting, lastHeader);
+        }
 
-		private void AddSliderSetting(ModSettingsBase modSettings, FieldInfo field, NameAttribute name, DescriptionAttribute description, SliderAttribute range) {
-			// Create menu
-			GameObject setting = CreateSetting(name, description, ObjectPrefabs.SliderPrefab, "Label_FOV");
-			ConsoleSlider slider = setting.GetComponent<ConsoleSlider>();
-			UILabel uiLabel = slider.m_SliderObject.GetComponentInChildren<UILabel>();
-			UISlider uiSlider = slider.m_SliderObject.GetComponentInChildren<UISlider>();
+        private void UpdateKeyValue(ModSettingsBase modSettings, FieldInfo field, CustomKeybinding customKeybinding)
+        {
+            SetSettingsField(modSettings, field, customKeybinding.currentKeycodeSetting);
+        }
 
-			// Sanitize user values, especially if the field type is int
-			bool isFloat = IsFloatType(field.FieldType);
-			float from = isFloat ? range.From : Mathf.Round(range.From);
-			float to = isFloat ? range.To : Mathf.Round(range.To);
-			int numberOfSteps = range.NumberOfSteps;
-			if (numberOfSteps < 0) {
-				numberOfSteps = isFloat ? 1 : Mathf.RoundToInt(Mathf.Abs(from - to)) + 1;
-			}
-			string? numberFormat = range.NumberFormat;
-			if (string.IsNullOrEmpty(numberFormat)) {
-				numberFormat = isFloat ? SliderAttribute.DefaultFloatFormat : SliderAttribute.DefaultIntFormat;
-			}
+        private void UpdateKeyChoice(ModSettingsBase modSettings, FieldInfo field, CustomKeybinding customKeybinding)
+        {
+            KeyCode keyCode = (KeyCode)field.GetValue(modSettings);
+            customKeybinding.currentKeycodeSetting = keyCode;
+            customKeybinding.keyRebindingButton.SetValueLabel(keyCode.ToString());
+        }
 
-			// Add listeners to update setting value
-			EventDelegate.Callback callback = new Action(() => UpdateSliderValue(modSettings, field, uiSlider, uiLabel, from, to, numberFormat));
-			EventDelegate.Set(slider.onChange, callback);
-			EventDelegate.Set(uiSlider.onChange, callback);
-			modSettings.AddRefreshAction(() => UpdateSlider(modSettings, field, uiSlider, uiLabel, from, to, numberFormat));
+        private void AddChoiceSetting(ModSettingsBase modSettings, FieldInfo field, NameAttribute name, DescriptionAttribute description, ChoiceAttribute choice)
+        {
+            // Create menu item
+            GameObject setting = CreateSetting(name, description, ObjectPrefabs.ComboBoxPrefab, "Label");
+            ConsoleComboBox comboBox = setting.GetComponent<ConsoleComboBox>();
 
-			// Set default value and number of steps
-			float defaultValue = Convert.ToSingle(field.GetValue(modSettings));
-			uiSlider.value = (defaultValue - from) / (to - from);
-			uiSlider.numberOfSteps = numberOfSteps;
-			UpdateSliderLabel(field, uiLabel, defaultValue, numberFormat);
+            // Add selectable values
+            comboBox.items.Clear();
+            foreach (string choiceName in choice.Names)
+            {
+                comboBox.items.Add(choiceName);
+            }
+            comboBox.m_Localize = choice.Localize;
 
-			// Control visibility
-			SetVisibilityListener(modSettings, field, setting, lastHeader);
-		}
+            // Add listener and set default value
+            EventDelegate.Set(comboBox.onChange, new Action(() => UpdateChoiceValue(modSettings, field, comboBox.GetCurrentIndex())));
+            modSettings.AddRefreshAction(() => UpdateChoiceComboBox(modSettings, field, comboBox));
 
-		private void UpdateSliderValue(ModSettingsBase modSettings, FieldInfo field, UISlider slider, UILabel label, float from, float to, string numberFormat) {
-			float sliderValue = from + slider.value * (to - from);
-			if (SliderMatchesField(modSettings, field, sliderValue)) return;
-			if (IsIntegerType(field.FieldType)) {
-				sliderValue = Mathf.Round(sliderValue);
-			}
+            // Control visibility
+            SetVisibilityListener(modSettings, field, setting, lastHeader);
+        }
 
-			UpdateSliderLabel(field, label, sliderValue, numberFormat);
-			SetSettingsField(modSettings, field, Convert.ChangeType(sliderValue, field.FieldType, null));
+        private void UpdateChoiceValue(ModSettingsBase modSettings, FieldInfo field, int selectedIndex)
+        {
+            Type fieldType = field.FieldType;
+            if (fieldType.IsEnum)
+            {
+                fieldType = Enum.GetUnderlyingType(fieldType);
+            }
 
-			if (modSettings.IsVisible() && slider.numberOfSteps > 1) {
-				GameAudioManager.PlayGUISlider();
-			}
-		}
+            SetSettingsField(modSettings, field, Convert.ChangeType(selectedIndex, fieldType, null));
+        }
 
-		private static void UpdateSlider(ModSettingsBase modSettings, FieldInfo field, UISlider slider, UILabel label, float from, float to, string numberFormat) {
-			float sliderValue = from + slider.value * (to - from);
-			if (SliderMatchesField(modSettings, field, sliderValue)) return;
+        private static void UpdateChoiceComboBox(ModSettingsBase modSettings, FieldInfo field, ConsoleComboBox comboBox)
+        {
+            int value = Convert.ToInt32(field.GetValue(modSettings));
+            comboBox.value = comboBox.items[value];
+        }
 
-			float value = Convert.ToSingle(field.GetValue(modSettings));
-			slider.value = (value - from) / (to - from);
-			UpdateSliderLabel(field, label, value, numberFormat);
-		}
+        private void AddSliderSetting(ModSettingsBase modSettings, FieldInfo field, NameAttribute name, DescriptionAttribute description, SliderAttribute range)
+        {
+            // Create menu
+            GameObject setting = CreateSetting(name, description, ObjectPrefabs.SliderPrefab, "Label_FOV");
+            ConsoleSlider slider = setting.GetComponent<ConsoleSlider>();
+            UILabel uiLabel = slider.m_SliderObject.GetComponentInChildren<UILabel>();
+            UISlider uiSlider = slider.m_SliderObject.GetComponentInChildren<UISlider>();
 
-		private static bool SliderMatchesField(ModSettingsBase modSettings, FieldInfo field, float sliderValue) {
-			if (IsFloatType(field.FieldType)) {
-				float oldValue = Convert.ToSingle(field.GetValue(modSettings));
-				return sliderValue == oldValue;
-			} else {
-				long oldValue = Convert.ToInt64(field.GetValue(modSettings));
-				long longValue = (long) Mathf.Round(sliderValue);
-				return oldValue == longValue;
-			}
-		}
+            // Sanitize user values, especially if the field type is int
+            bool isFloat = IsFloatType(field.FieldType);
+            float from = isFloat ? range.From : Mathf.Round(range.From);
+            float to = isFloat ? range.To : Mathf.Round(range.To);
+            int numberOfSteps = range.NumberOfSteps;
+            if (numberOfSteps < 0)
+            {
+                numberOfSteps = isFloat ? 1 : Mathf.RoundToInt(Mathf.Abs(from - to)) + 1;
+            }
+            string? numberFormat = range.NumberFormat;
+            if (string.IsNullOrEmpty(numberFormat))
+            {
+                numberFormat = isFloat ? SliderAttribute.DefaultFloatFormat : SliderAttribute.DefaultIntFormat;
+            }
 
-		private static void UpdateSliderLabel(FieldInfo field, UILabel label, float value, string numberFormat) {
-			if (IsFloatType(field.FieldType)) {
-				label.text = string.Format(numberFormat, value);
-			} else {
-				long longValue = (long) Mathf.Round(value);
-				label.text = string.Format(numberFormat, longValue);
-			}
-		}
+            // Add listeners to update setting value
+            EventDelegate.Callback callback = new Action(() => UpdateSliderValue(modSettings, field, uiSlider, uiLabel, from, to, numberFormat));
+            EventDelegate.Set(slider.onChange, callback);
+            EventDelegate.Set(uiSlider.onChange, callback);
+            modSettings.AddRefreshAction(() => UpdateSlider(modSettings, field, uiSlider, uiLabel, from, to, numberFormat));
 
-		private GameObject CreateSetting(NameAttribute name, DescriptionAttribute description, GameObject prefab, string labelName) {
-			GameObject setting = NGUITools.AddChild(uiGrid.gameObject, prefab);
-			setting.name = "Custom Setting (" + name.Name + ")";
+            // Set default value and number of steps
+            float defaultValue = Convert.ToSingle(field.GetValue(modSettings));
+            uiSlider.value = (defaultValue - from) / (to - from);
+            uiSlider.numberOfSteps = numberOfSteps;
+            UpdateSliderLabel(field, uiLabel, defaultValue, numberFormat);
 
-			Transform labelTransform = setting.transform.Find(labelName);
-			SetLabelText(labelTransform, name.Name, name.Localize);
+            // Control visibility
+            SetVisibilityListener(modSettings, field, setting, lastHeader);
+        }
 
-			DescriptionHolder descriptionHolder = setting.AddComponent<DescriptionHolder>();
-			descriptionHolder.SetDescription(description?.Description ?? string.Empty, description?.Localize ?? false);
+        private void UpdateSliderValue(ModSettingsBase modSettings, FieldInfo field, UISlider slider, UILabel label, float from, float to, string numberFormat)
+        {
+            float sliderValue = from + slider.value * (to - from);
+            if (SliderMatchesField(modSettings, field, sliderValue)) return;
+            if (IsIntegerType(field.FieldType))
+            {
+                sliderValue = Mathf.Round(sliderValue);
+            }
 
-			menuItems.Add(setting);
-			return setting;
-		}
+            UpdateSliderLabel(field, label, sliderValue, numberFormat);
+            SetSettingsField(modSettings, field, Convert.ChangeType(sliderValue, field.FieldType, null));
 
-		private static void SetLabelText(Transform transform, string text, bool localize) {
-			if (localize) {
-				UILocalize uiLocalize = transform.GetComponent<UILocalize>();
-				uiLocalize.key = text;
-			} else {
-				UnityEngine.Object.Destroy(transform.GetComponent<UILocalize>());
-				UILabel uiLabel = transform.GetComponent<UILabel>();
-				uiLabel.text = text;
-			}
-		}
+            if (modSettings.IsVisible() && slider.numberOfSteps > 1)
+            {
+                GameAudioManager.PlayGUISlider();
+            }
+        }
 
-		private void SetVisibilityListener(ModSettingsBase modSettings, FieldInfo field, GameObject guiObject, Header header) {
-			bool startVisible = modSettings.IsFieldVisible(field);
-			if (guiObject.activeSelf != startVisible) {
-				guiObject.SetActive(startVisible);
-			}
-			header?.NotifyChildAdded(startVisible);
+        private static void UpdateSlider(ModSettingsBase modSettings, FieldInfo field, UISlider slider, UILabel label, float from, float to, string numberFormat)
+        {
+            float sliderValue = from + slider.value * (to - from);
+            if (SliderMatchesField(modSettings, field, sliderValue)) return;
 
-			modSettings.AddVisibilityListener(field, (visible) => {
-				guiObject.SetActive(visible);
-				header?.NotifyChildVisible(visible);
-				uiGrid.repositionNow = true;
-			});
-		}
+            float value = Convert.ToSingle(field.GetValue(modSettings));
+            slider.value = (value - from) / (to - from);
+            UpdateSliderLabel(field, label, value, numberFormat);
+        }
 
-		protected class Header : Group {
+        private static bool SliderMatchesField(ModSettingsBase modSettings, FieldInfo field, float sliderValue)
+        {
+            if (IsFloatType(field.FieldType))
+            {
+                float oldValue = Convert.ToSingle(field.GetValue(modSettings));
+                return sliderValue == oldValue;
+            }
+            else
+            {
+                long oldValue = Convert.ToInt64(field.GetValue(modSettings));
+                long longValue = (long)Mathf.Round(sliderValue);
+                return oldValue == longValue;
+            }
+        }
 
-			private readonly List<GameObject> guiObjects;
+        private static void UpdateSliderLabel(FieldInfo field, UILabel label, float value, string numberFormat)
+        {
+            if (IsFloatType(field.FieldType))
+            {
+                label.text = string.Format(numberFormat, value);
+            }
+            else
+            {
+                long longValue = (long)Mathf.Round(value);
+                label.text = string.Format(numberFormat, longValue);
+            }
+        }
 
-			internal Header(params GameObject[] guiObjects) {
-				this.guiObjects = new List<GameObject>(guiObjects);
-			}
+        private GameObject CreateSetting(NameAttribute name, DescriptionAttribute description, GameObject prefab, string labelName)
+        {
+            GameObject setting = NGUITools.AddChild(uiGrid.gameObject, prefab);
+            setting.name = "Custom Setting (" + name.Name + ")";
 
-			protected override void SetVisible(bool visible) {
-				foreach (GameObject guiObject in guiObjects) {
-					NGUITools.SetActiveSelf(guiObject, visible);
-				}
-			}
-		}
-	}
+            Transform labelTransform = setting.transform.Find(labelName);
+            SetLabelText(labelTransform, name.Name, name.Localize);
+
+            DescriptionHolder descriptionHolder = setting.AddComponent<DescriptionHolder>();
+            descriptionHolder.SetDescription(description?.Description ?? string.Empty, description?.Localize ?? false);
+
+            menuItems.Add(setting);
+            return setting;
+        }
+
+        private static void SetLabelText(Transform transform, string text, bool localize)
+        {
+            if (localize)
+            {
+                UILocalize uiLocalize = transform.GetComponent<UILocalize>();
+                uiLocalize.key = text;
+            }
+            else
+            {
+                UnityEngine.Object.Destroy(transform.GetComponent<UILocalize>());
+                UILabel uiLabel = transform.GetComponent<UILabel>();
+                uiLabel.text = text;
+            }
+        }
+
+        private void SetVisibilityListener(ModSettingsBase modSettings, FieldInfo field, GameObject guiObject, Header header)
+        {
+            bool startVisible = modSettings.IsFieldVisible(field);
+            if (guiObject.activeSelf != startVisible)
+            {
+                guiObject.SetActive(startVisible);
+            }
+            header?.NotifyChildAdded(startVisible);
+
+            modSettings.AddVisibilityListener(field, (visible) =>
+            {
+                guiObject.SetActive(visible);
+                header?.NotifyChildVisible(visible);
+                uiGrid.repositionNow = true;
+            });
+        }
+
+        protected class Header : Group
+        {
+
+            private readonly List<GameObject> guiObjects;
+
+            internal Header(params GameObject[] guiObjects)
+            {
+                this.guiObjects = new List<GameObject>(guiObjects);
+            }
+
+            protected override void SetVisible(bool visible)
+            {
+                foreach (GameObject guiObject in guiObjects)
+                {
+                    NGUITools.SetActiveSelf(guiObject, visible);
+                }
+            }
+        }
+    }
 }
