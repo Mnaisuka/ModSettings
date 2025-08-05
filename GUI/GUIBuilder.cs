@@ -78,10 +78,12 @@ namespace ModSettings
                     }
                 }
 
-                // 将更新后的内容写回文件
-                string updatedJson = JSON.Dump(jsonData, EncodeOptions.PrettyPrint);
-                File.WriteAllText(jsonPath, updatedJson, System.Text.Encoding.UTF8);
-
+                // 是否调试模式
+                if (File.Exists("debug"))
+                {
+                    string updatedJson = JSON.Dump(jsonData, EncodeOptions.PrettyPrint);
+                    File.WriteAllText(jsonPath, updatedJson, System.Text.Encoding.UTF8);
+                }
                 // -----------
 
 
