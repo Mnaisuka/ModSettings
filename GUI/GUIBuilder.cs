@@ -48,7 +48,20 @@ namespace ModSettings
                     }
                     catch (Exception e)
                     {
-                        MelonLoader.MelonLogger.Warning("Settings.json 格式错误：" + e.Message);
+                        MelonLoader.MelonLogger.Warning("Settings.json - " + e.Message);
+                    }
+                }
+
+                if (section != null && section.Title != null)
+                {
+                    string sectionKey = section.Title;
+                    if (jsonData.TryGetValue(sectionKey, out string newSection))
+                    {
+                        section = new SectionAttribute(newSection);
+                    }
+                    else
+                    {
+                        jsonData[sectionKey] = section.Title; // 不存在就添加原始值
                     }
                 }
 
@@ -79,7 +92,7 @@ namespace ModSettings
                 }
 
                 // 是否调试模式
-                if (File.Exists("debug"))
+                if (File.Exists("DEBUG"))
                 {
                     string updatedJson = JSON.Dump(jsonData, EncodeOptions.PrettyPrint);
                     File.WriteAllText(jsonPath, updatedJson, System.Text.Encoding.UTF8);
